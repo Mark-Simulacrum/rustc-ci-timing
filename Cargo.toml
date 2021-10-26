@@ -6,3 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
+serde = "1"
+serde_derive = "1"
+anyhow = "1"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+csv = "1"
+time = { version = "0.3", features = ["parsing"] }
