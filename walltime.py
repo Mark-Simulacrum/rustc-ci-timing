@@ -8,6 +8,10 @@ import collections
 import statistics as stats
 from datetime import datetime
 
+# Which builders to graph
+def filter_display(builder_name):
+    return "apple" in key
+
 by_builder = {}
 with open('data.csv') as f:
     for line in f:
@@ -34,7 +38,7 @@ def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
     return new_data
 
 for key in by_builder.keys():
-    if not "apple" in key:
+    if not filter_display(key):
         continue
     dates_list = downsample_data(by_builder[key], 0, lambda a: a[-1])
     ax.plot(dates_list, downsample_data(by_builder[key], 1), label=key)

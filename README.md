@@ -10,3 +10,6 @@ To use, run:
 cargo run --release # May take a while on the first run, incremental
 python3 walltime.py
 ```
+
+You can edit walltime.py to adjust which builders are shown (see the
+`filter_display` function).
