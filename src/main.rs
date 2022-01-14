@@ -4,7 +4,7 @@ use serde_derive::Deserialize;
 use std::collections::HashSet;
 use std::fmt;
 
-const BUILDERS: [&'static str; 58] = [
+const BUILDERS: [&'static str; 59] = [
     "aarch64-gnu",
     "arm-android",
     "armhf-gnu",
@@ -31,9 +31,11 @@ const BUILDERS: [&'static str; 58] = [
     "dist-various-1",
     "dist-various-2",
     "dist-x86_64-apple",
+    "dist-x86_64-apple-alt",
     "dist-x86_64-freebsd",
     "dist-x86_64-illumos",
     "dist-x86_64-linux",
+    "dist-x86_64-linux-alt",
     "dist-x86_64-mingw",
     "dist-x86_64-msvc",
     "dist-x86_64-musl",
@@ -51,7 +53,6 @@ const BUILDERS: [&'static str; 58] = [
     "x86_64-gnu-aux",
     "x86_64-gnu-debug",
     "x86_64-gnu-distcheck",
-    "x86_64-gnu-llvm-10",
     "x86_64-gnu-llvm-12",
     "x86_64-gnu-nopt",
     "x86_64-gnu-stable",
@@ -78,14 +79,14 @@ impl fmt::Display for Commit {
 }
 
 // Skip these commits
-fn try_load_previous() -> anyhow::Result<HashSet<String>> {
+fn try_load_previous() -> anyhow::Result<HashSet<(String, String)>> {
     let mut set = HashSet::new();
     let mut rdr = csv::Reader::from_path("data.csv")?;
 
     for row in rdr.records() {
         if let Ok(row) = row {
-            if let Some(commit) = row.get(0) {
-                set.insert(commit.to_owned());
+            if let (Some(commit), Some(builder)) = (row.get(0), row.get(2)) {
+                set.insert((commit.to_owned(), builder.to_owned()));
             }
         }
     }
@@ -114,93 +115,116 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let client = reqwest::Client::new();
-    for (idx, commit) in commits.iter().enumerate() {
-        if seen_commits.contains(&commit.sha) {
-            continue;
-        }
-        let mut f = futures::stream::FuturesUnordered::new();
+    // Number of open file descriptors we can support.
+    let semaphore = tokio::sync::Semaphore::new(256);
+    let mut f = futures::stream::FuturesUnordered::new();
+    let semaphore = &semaphore;
+    for commit in commits.iter() {
+        let mut did_push = false;
         for builder in BUILDERS {
+            let key = (commit.sha.clone(), builder.to_owned());
+            if seen_commits.contains(&key) {
+                continue;
+            }
+            let key = format!("{} for {}", builder, commit.sha);
+            eprintln!("Fetching {} for {}", builder, commit);
             let client = client.clone();
+            did_push = true;
             f.push(async move {
+                let _permit = semaphore.acquire().await.unwrap();
                 let url = format!(
-                    "https://ci-artifacts.rust-lang.org/rustc-builds/{}/cpu-{}.csv",
-                    commit.sha, builder,
+                    "https://ci-artifacts.rust-lang.org/rustc-builds{}/{}/cpu-{}.csv",
+                    if builder.ends_with("-alt") {
+                        "-alt"
+                    } else {
+                        ""
+                    },
+                    commit.sha,
+                    builder,
                 );
                 Ok::<_, anyhow::Error>((
+                    commit.clone(),
                     builder,
                     client
                         .get(&url)
                         .send()
                         .await
-                        .context(builder)?
+                        .context(key.clone())?
                         .error_for_status()
-                        .context(builder)?
+                        .context(key.clone())?
                         .text()
                         .await
-                        .context(builder)?,
+                        .context(key)?,
                 ))
             });
         }
-        loop {
-            match f.try_next().await {
-                Ok(Some((builder, csv))) => {
-                    let mut rdr = csv::Reader::from_reader(csv.as_bytes());
-                    let mut started_at = None;
-                    let mut ended_at = None;
-                    let mut total_cpu_usage = 0.0;
-                    let mut records = 0;
-                    for result in rdr.records() {
-                        let record =
-                            result.with_context(|| format!("record for {} {}", builder, commit))?;
-                        let date_time = record.get(0).expect("has time");
-                        let date_time = time::PrimitiveDateTime::parse(
-                            &format!("{}Z", date_time),
-                            &time::format_description::well_known::Rfc3339,
-                        )
-                        .with_context(|| format!("{} in {} {}", date_time, builder, commit))?;
+        if !did_push {
+            break;
+        }
+    }
 
-                        if started_at.is_none() {
-                            started_at = Some(date_time);
-                        }
-                        ended_at = Some(date_time);
-                        total_cpu_usage += 100.0 - record.get(1).unwrap().parse::<f64>().unwrap();
-                        records += 1;
+    println!("queued {} downloads", f.len());
+
+    loop {
+        match f.try_next().await {
+            Ok(Some((commit, builder, csv))) => {
+                let mut rdr = csv::Reader::from_reader(csv.as_bytes());
+                let mut started_at = None;
+                let mut ended_at = None;
+                let mut total_cpu_usage = 0.0;
+                let mut records = 0;
+                for result in rdr.records() {
+                    let record =
+                        result.with_context(|| format!("record for {} {}", builder, commit))?;
+                    let date_time = record.get(0).expect("has time");
+                    let date_time = time::PrimitiveDateTime::parse(
+                        &format!("{}Z", date_time),
+                        &time::format_description::well_known::Rfc3339,
+                    )
+                    .with_context(|| format!("{} in {} {}", date_time, builder, commit))?;
+
+                    if started_at.is_none() {
+                        started_at = Some(date_time);
                     }
-
-                    let (started_at, ended_at) =
-                        if let (Some(start), Some(end)) = (started_at, ended_at) {
-                            (start, end)
-                        } else {
-                            anyhow::bail!("Could not find start/end for {} @ {}", builder, commit);
-                        };
-
-                    let avg_cpu_usage = total_cpu_usage / (records as f64);
-
-                    output.write_record(&[
-                        &commit.sha,
-                        &commit.time,
-                        builder,
-                        &format!(
-                            "{}",
-                            std::time::Duration::try_from(ended_at - started_at)
-                                .unwrap()
-                                .as_secs()
-                        ),
-                        &format!("{:.4}", avg_cpu_usage),
-                    ])?;
+                    ended_at = Some(date_time);
+                    total_cpu_usage += 100.0 - record.get(1).unwrap().parse::<f64>().unwrap();
+                    records += 1;
                 }
-                Ok(None) => break,
-                Err(e) => {
-                    if let Some(req) = e.downcast_ref::<reqwest::Error>() {
-                        if req.status() == Some(reqwest::StatusCode::NOT_FOUND) {
-                            continue;
-                        }
+
+                let (started_at, ended_at) =
+                    if let (Some(start), Some(end)) = (started_at, ended_at) {
+                        (start, end)
+                    } else {
+                        anyhow::bail!("Could not find start/end for {} @ {}", builder, commit);
+                    };
+
+                let avg_cpu_usage = total_cpu_usage / (records as f64);
+
+                output.write_record(&[
+                    &commit.sha,
+                    &commit.time,
+                    builder,
+                    &format!(
+                        "{}",
+                        std::time::Duration::try_from(ended_at - started_at)
+                            .unwrap()
+                            .as_secs()
+                    ),
+                    &format!("{:.4}", avg_cpu_usage),
+                ])?;
+
+                eprintln!("{} downloads left", f.len());
+            }
+            Ok(None) => break,
+            Err(e) => {
+                if let Some(req) = e.downcast_ref::<reqwest::Error>() {
+                    if req.status() == Some(reqwest::StatusCode::NOT_FOUND) {
+                        continue;
                     }
-                    eprintln!("{} failed to download: {:?}", commit, e)
                 }
+                eprintln!("failed to download: {:?}", e)
             }
         }
-        println!("{}/{}", idx, commits.len());
     }
 
     output.flush()?;
