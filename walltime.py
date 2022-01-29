@@ -56,7 +56,7 @@ ax.set(ylabel = "Hours")
 ax2.set(ylabel = "CPU usage")
 
 for a in [ax, ax2]:
-    a.legend()
+    a.legend(loc='upper left')
     minor = mdates.RRuleLocator(mdates.rrulewrapper(mdates.WEEKLY))
     a.xaxis.set_minor_locator(minor)
     a.format_xdata = mdates.DateFormatter('%Y-%m-%d')
