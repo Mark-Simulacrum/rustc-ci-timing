@@ -4,7 +4,7 @@ use serde_derive::Deserialize;
 use std::collections::HashSet;
 use std::fmt;
 
-const BUILDERS: [&'static str; 59] = [
+const BUILDERS: &[&'static str] = &[
     "aarch64-gnu",
     "arm-android",
     "armhf-gnu",
@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
     let semaphore = &semaphore;
     for commit in commits.iter() {
         let mut did_push = false;
-        for builder in BUILDERS {
+        for builder in BUILDERS.iter().copied() {
             let key = (commit.sha.clone(), builder.to_owned());
             if seen_commits.contains(&key) {
                 continue;
