@@ -31,6 +31,7 @@ const BUILDERS: [&'static str; 59] = [
     "dist-various-1",
     "dist-various-2",
     "dist-x86_64-apple",
+    "dist-apple-various",
     "dist-x86_64-apple-alt",
     "dist-x86_64-freebsd",
     "dist-x86_64-illumos",
