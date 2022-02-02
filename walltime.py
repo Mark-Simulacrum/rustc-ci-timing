@@ -39,7 +39,7 @@ def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
 window = 8*4
 builder_max = []
 for key in by_builder.keys():
-    builder_max.append((max([x[1] for x in by_builder[key][-window:]]), key))
+    builder_max.append((stats.median([x[1] for x in by_builder[key][-window:]]), key))
 builder_max.sort()
 top_5_time = []
 for max_time, key in builder_max[-5:]:
