@@ -25,7 +25,7 @@ for builder in by_builder.keys():
 
 def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
     new_data = []
-    length = 8*4
+    length = 8*2
     window = collections.deque(map(lambda v: v[idx], itertools.islice(data, length)), maxlen=length)
     for entry in data:
         window.append(entry[idx])
