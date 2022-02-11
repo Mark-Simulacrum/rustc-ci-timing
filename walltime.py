@@ -7,50 +7,84 @@ import itertools
 import collections
 import statistics as stats
 from datetime import datetime
+from collections import namedtuple
+
+Point = namedtuple('Point', ['time', 'cpu'])
+DatePoint = namedtuple('DatePoint', ['date', 'time', 'cpu'])
 
 by_builder = {}
+dates = set()
 with open('data.csv') as f:
     for line in f:
         c = csv.reader([line], delimiter=',')
         for row in c:
             date = datetime.fromisoformat(row[1])
-            by_builder.setdefault(row[2], []).append((
-                date, int(row[3])/60.0/60, float(row[4])
-            ))
+            dates.add(date)
+            by_builder.setdefault(row[2], {})[date] = Point(
+                time=int(row[3])/60.0/60,
+                cpu=float(row[4]),
+            )
 
 fig, (ax, ax2) = plt.subplots(2)
 
+dates = list(sorted(dates))
+
+# Get the top 5 builders by the maximum time in the last commit.
+time_points = []
+cpu_points = []
 for builder in by_builder.keys():
-    by_builder[builder].sort()
+    last_date = dates[-1]
+    pt = by_builder[builder].get(last_date)
+    if pt:
+        time_points.append((pt.time, builder))
+        cpu_points.append((pt.cpu, builder))
+top_5_time = [pt[1] for pt in list(sorted(time_points))[-5:]]
+min_5_cpu = [pt[1] for pt in list(sorted(cpu_points))[:5]]
+
+for builder in by_builder.keys():
+    new_data = []
+    for date in dates:
+        if date in by_builder[builder]:
+            new_data.append(DatePoint(
+                date=date,
+                cpu=by_builder[builder][date].cpu,
+                time=by_builder[builder][date].time,
+            ))
+        else:
+            new_data.append(DatePoint(
+                date=date,
+                cpu=None,
+                time=None,
+            ))
+    by_builder[builder] = new_data
 
 def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
+    dates = []
     new_data = []
-    length = 8*2
-    window = collections.deque(map(lambda v: v[idx], itertools.islice(data, length)), maxlen=length)
+    length = 8*4
+    window = collections.deque(
+        map(lambda v: v[idx], itertools.islice(data, length)),
+        maxlen=length
+    )
+    window_date = collections.deque(
+        map(lambda v: v[0], itertools.islice(data, length)),
+        maxlen=length
+    )
     for entry in data:
+        window_date.append(entry[0])
         window.append(entry[idx])
-        if len(window) != 0:
-            new_data.append(downsampler(window))
-    return new_data
-
-
-# Graph the top 5 builders, by time, where the metric used is maximum time taken
-# in the last `window` commits.
-window = 8*4
-builder_max = []
-for key in by_builder.keys():
-    builder_max.append((stats.median([x[1] for x in by_builder[key][-window:]]), key))
-builder_max.sort()
-top_5_time = []
-for max_time, key in builder_max[-5:]:
-    top_5_time.append(key)
+        filtered = list(filter(lambda x: x is not None, window))
+        if len(filtered) > 0:
+            new_data.append(downsampler(filtered))
+            dates.append(window_date[-1])
+    return (dates, new_data)
 
 for key in by_builder.keys():
-    if not key in top_5_time:
-        continue
-    dates_list = downsample_data(by_builder[key], 0, lambda a: a[-1])
-    ax.plot(dates_list, downsample_data(by_builder[key], 1), label=key)
-    ax2.plot(dates_list, downsample_data(by_builder[key], 2), label=key)
+    if key in top_5_time:
+        (dates, data) = downsample_data(by_builder[key], 1)
+        ax.plot(dates, data, '-+', label=key)
+        (dates, data) = downsample_data(by_builder[key], 2)
+        ax2.plot(dates, data, '-+', label=key)
 
 ax.set(ylabel = "Hours")
 ax2.set(ylabel = "CPU usage")
