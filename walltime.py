@@ -58,10 +58,9 @@ for builder in by_builder.keys():
             ))
     by_builder[builder] = new_data
 
-def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
+def downsample_data(data, idx, downsampler=lambda a: stats.median(a), length=12):
     dates = []
     new_data = []
-    length = 8*4
     window = collections.deque(
         map(lambda v: v[idx], itertools.islice(data, length)),
         maxlen=length
@@ -82,9 +81,9 @@ def downsample_data(data, idx, downsampler=lambda a: stats.median(a)):
 for key in by_builder.keys():
     if key in top_5_time:
         (dates, data) = downsample_data(by_builder[key], 1)
-        ax.plot(dates, data, '-+', label=key)
-        (dates, data) = downsample_data(by_builder[key], 2)
-        ax2.plot(dates, data, '-+', label=key)
+        ax.plot(dates, data, label=key)
+        (dates, data) = downsample_data(by_builder[key], 2, length=1)
+        ax2.plot(dates, data, label=key)
 
 ax.set(ylabel = "Hours")
 ax2.set(ylabel = "CPU usage")
