@@ -50,7 +50,8 @@ const BUILDERS: &[&'static str] = &[
     "mingw-check",
     "test-various",
     "wasm32",
-    "x86_64-apple",
+    "x86_64-apple-1",
+    "x86_64-apple-2",
     "x86_64-gnu-aux",
     "x86_64-gnu-debug",
     "x86_64-gnu-distcheck",
@@ -220,6 +221,7 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => {
                 if let Some(req) = e.downcast_ref::<reqwest::Error>() {
                     if req.status() == Some(reqwest::StatusCode::NOT_FOUND) {
+                        eprintln!("{} downloads left", f.len());
                         continue;
                     }
                 }
