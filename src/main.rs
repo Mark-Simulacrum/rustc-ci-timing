@@ -4,7 +4,8 @@ use serde_derive::Deserialize;
 use std::collections::HashSet;
 use std::fmt;
 
-const BUILDERS: &[&'static str] = &[
+// Expect 62 builders currently.
+const BUILDERS: &[&'static str; 62] = &[
     "aarch64-gnu",
     "arm-android",
     "armhf-gnu",
