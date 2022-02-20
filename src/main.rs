@@ -39,6 +39,7 @@ const BUILDERS: &[&'static str] = &[
     "dist-x86_64-linux-alt",
     "dist-x86_64-mingw",
     "dist-x86_64-msvc",
+    "dist-x86_64-msvc-alt",
     "dist-x86_64-musl",
     "dist-x86_64-netbsd",
     "i686-gnu-nopt",
