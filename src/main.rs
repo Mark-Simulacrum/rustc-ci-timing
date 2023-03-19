@@ -57,7 +57,7 @@ const BUILDERS: &[&'static str; 62] = &[
     "x86_64-gnu-aux",
     "x86_64-gnu-debug",
     "x86_64-gnu-distcheck",
-    "x86_64-gnu-llvm-12",
+    "x86_64-gnu-llvm-14",
     "x86_64-gnu-nopt",
     "x86_64-gnu-stable",
     "x86_64-gnu-tools",
